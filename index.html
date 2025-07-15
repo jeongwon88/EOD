@@ -37,29 +37,30 @@
         
         .input-section {
             background-color: var(--secondary-color);
-            padding: 20px;
-            margin-bottom: 20px;
+            padding: 16px;
+            margin-bottom: 14px;
             border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            box-shadow: 0 2px 4px rgba(0,0,0,0.07);
         }
         
         select, input[type="number"] {
             width: 100%;
-            padding: 10px;
-            margin-bottom: 10px;
+            padding: 8px;
+            margin-bottom: 8px;
             border: 1px solid #ddd;
             border-radius: 4px;
+            font-size: 15px;
         }
         
         .calculate-btn {
             width: 100%;
-            padding: 12px;
+            padding: 10px;
             background-color: var(--accent-color);
             color: white;
             border: none;
             border-radius: 4px;
             cursor: pointer;
-            font-size: 16px;
+            font-size: 15px;
             font-weight: bold;
         }
         
@@ -254,6 +255,24 @@
         @media (max-width: 600px) {
             .image-upload-section {
                 flex-direction: column; /* 작은 화면에서는 세로로 쌓기 */
+            }
+            .container {
+                padding: 6px;
+            }
+            .input-section {
+                padding: 10px;
+                margin-bottom: 8px;
+            }
+            select, input[type="number"] {
+                padding: 7px;
+                font-size: 14px;
+            }
+            .calculate-btn {
+                padding: 8px;
+                font-size: 14px;
+            }
+            h3 {
+                font-size: 1.1em;
             }
         }
     </style>
@@ -598,6 +617,9 @@
             lastCalculatedDistances = distances;
 
             const resultsSection = document.getElementById('results-section');
+            const selectedK = parseFloat(document.getElementById('kFactor').value);
+            const customDistance = Math.ceil(selectedK * Math.pow(tntEquivalent, 1/3));
+
             resultsSection.innerHTML = `
                 <h3>분석 결과</h3>
                 <div class="result-item">
@@ -612,20 +634,25 @@
                     <span>TNT 당량:</span>
                     <strong>${tntEquivalent.toFixed(2)} kg (${(tntEquivalent * 2.20462).toFixed(2)} lb)</strong>
                 </div>
+                <div class="result-item" style="background:#e9f7ef;">
+                    <span style="font-weight:bold;">설정 대피거리:</span>
+                    <strong>${customDistance} m</strong>
+                    <span style="font-size:13px;display:block;margin-top:4px;">(계산식: ${selectedK} × (${tntEquivalent.toFixed(2)})⅓ = ${customDistance}m)</span>
+                </div>
                 <div class="result-item">
                     <span>권장 대피거리:</span>
                     <div class="distance-list">
                         <div class="distance-item">
                             <strong>${distances.protected.distance} m</strong>
-                            <span class="distance-desc">${distances.protected.description}</span>
+                            <span class="distance-desc">${distances.protected.description} (계산식: 12 × (${tntEquivalent.toFixed(2)})⅓ = ${distances.protected.distance}m)</span>
                         </div>
                         <div class="distance-item">
                             <strong>${distances.building.distance} m</strong>
-                            <span class="distance-desc">${distances.building.description}</span>
+                            <span class="distance-desc">${distances.building.description} (계산식: 40 × (${tntEquivalent.toFixed(2)})⅓ = ${distances.building.distance}m)</span>
                         </div>
                         <div class="distance-item">
                             <strong>${distances.general.distance} m</strong>
-                            <span class="distance-desc">${distances.general.description}</span>
+                            <span class="distance-desc">${distances.general.description} (계산식: 50 × (${tntEquivalent.toFixed(2)})⅓ = ${distances.general.distance}m)</span>
                         </div>
                     </div>
                 </div>
