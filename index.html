@@ -6,6 +6,8 @@
     <title>경찰특공대 EOD 분석시스템</title>
     <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+    <!-- jsPDF CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <style>
         :root {
             --primary-color: #000000;
@@ -62,6 +64,7 @@
             cursor: pointer;
             font-size: 15px;
             font-weight: bold;
+            min-height: 36px;
         }
         
         .results-section {
@@ -107,9 +110,11 @@
             color: white;
             border: none;
             border-radius: 4px;
-            padding: 8px 16px;
+            padding: 8px 12px;
             cursor: pointer;
-            margin-bottom: 10px;
+            min-height: 32px;
+            font-size: 15px;
+            white-space: nowrap;
         }
 
         .circle-legend {
@@ -253,26 +258,81 @@
 
         /* 반응형 */
         @media (max-width: 600px) {
-            .image-upload-section {
-                flex-direction: column; /* 작은 화면에서는 세로로 쌓기 */
+            body {
+                padding: 2px;
             }
             .container {
-                padding: 6px;
+                max-width: 100vw;
+                padding: 2px;
             }
-            .input-section {
-                padding: 10px;
-                margin-bottom: 8px;
+            .header {
+                padding: 0.5rem;
+                font-size: 1.1em;
             }
-            select, input[type="number"] {
-                padding: 7px;
-                font-size: 14px;
+            .tabs {
+                margin-bottom: 10px;
             }
-            .calculate-btn {
-                padding: 8px;
-                font-size: 14px;
+            .tab {
+                padding: 8px 8px;
+                font-size: 13px;
+            }
+            .tab-content {
+                padding: 0;
+            }
+            .input-section, .results-section {
+                padding: 7px 4px;
+                margin-bottom: 7px;
+                font-size: 13px;
             }
             h3 {
-                font-size: 1.1em;
+                font-size: 1em;
+                margin: 8px 0 6px 0;
+            }
+            select, input[type="number"], input[type="text"] {
+                padding: 6px;
+                font-size: 13px;
+                margin-bottom: 6px;
+            }
+            .calculate-btn {
+                padding: 6px 0;
+                font-size: 13px;
+                min-height: 26px;
+                width: 100%;
+            }
+            .location-btn {
+                padding: 3px 5px;
+                font-size: 11px;
+                min-height: 18px;
+                width: auto;
+                white-space: nowrap;
+            }
+            .search-container {
+                flex-wrap: wrap;
+                gap: 2px;
+                margin-bottom: 4px;
+            }
+            .search-input {
+                font-size: 12px;
+                padding: 5px;
+            }
+            .result-item {
+                padding: 8px 4px;
+                font-size: 13px;
+            }
+            .image-upload-section {
+                gap: 8px;
+            }
+            .image-preview {
+                max-width: 100vw;
+                max-height: 220px;
+            }
+            #map {
+                height: 220px;
+                min-height: 120px;
+            }
+            .circle-legend {
+                padding: 6px;
+                font-size: 12px;
             }
         }
     </style>
@@ -431,6 +491,7 @@
                     <span>스위치:</span>
                     <input type="text" id="switchInput" placeholder="종류를 입력하세요">
                 </div>
+                <button id="savePdfBtn" class="calculate-btn" style="margin-top:10px;">데이터 저장</button>
             </div>
         </div>
     </div>
@@ -783,6 +844,38 @@
         window.addEventListener('load', function() {
             setupImagePreview('realPhoto', 'realPhotoPreview');
             setupImagePreview('xrayPhoto', 'xrayPhotoPreview');
+        });
+
+        // PDF 저장 기능 (의심물체 분석)
+        // 한글 폰트 내장
+        if (window.jspdf && window.jspdf.jsPDF) {
+            window.jspdf.jsPDF.API.events.push(['addFonts', function() {
+                this.addFileToVFS('NanumGothic.ttf',
+'AAEAAAASAQAABAAgR0RFRrRCsIIAAACcAAAAYGNtYXAWAAABHAAAADZnbHlmAAABuAAAABRnbHlmAAAB9AAAADZnbHlmAAACCAAAABRnbHlmAAACNAAAADZnbHlmAAACRAAAABRnbHlmAAACXAAAADZnbHlmAAACdAAAABRnbHlmAAACjAAAADZnbHlmAAACpAAAABRnbHlmAAACvAAAADZnbHlmAAAC1AAAABRnbHlmAAAC7AAAADZnbHlmAAADBAAAABRnbHlmAAADHAAAADZnbHlmAAADNAAAABRnbHlmAAADRAAAADZnbHlmAAADZAAAABRnbHlmAAADfAAAADZnbHlmAAADlAAAABRnbHlmAAADrAAAADZnbHlmAAADxAAAABRnbHlmAAAD3AAAADZnbHlmAAAEAAAAABRnbHlmAAAEGAAAADZnbHlmAAAEJAAAABRnbHlmAAAEQAAAADZnbHlmAAAEWAAAABRnbHlmAAAEcAAAADZnbHlmAAAEiAAAABRnbHlmAAAEoAAAADZnbHlmAAAEuAAAABRnbHlmAAAE0AAAADZnbHlmAAAE6AAAABRnbHlmAAAFBAAAADZnbHlmAAAFGAAAABRnbHlmAAAFMAAAADZnbHlmAAAFSAAAABRnbHlmAAAFWAAAADZnbHlmAAAFcAAAABRnbHlmAAAFiAAAADZnbHlmAAAFoAAAABRnbHlmAAAFuAAAADZnbHlmAAAF0AAAABRnbHlmAAAF6AAAADZnbHlmAAAGAAAAABRnbHlmAAAGGAAAADZnbHlmAAAGJAAAABRnbHlmAAAGQAAAADZnbHlmAAAGWAAAABRnbHlmAAAGcAAAADZnbHlmAAAGiAAAABRnbHlmAAAGoAAAADZnbHlmAAAGuAAAABRnbHlmAAAG0AAAADZnbHlmAAAG6AAAABRnbHlmAAAHBAAAADZnbHlmAAAHGAAAABRnbHlmAAAHMAAAADZnbHlmAAAHSAAAABRnbHlmAAAHWAAAADZnbHlmAAAHcAAAABRnbHlmAAAHiAAAADZnbHlmAAAHoAAAABRnbHlmAAAHuAAAADZnbHlmAAAH0AAAABRnbHlmAAAH6AAAADZnbHlmAAAI...');
+                this.addFont('NanumGothic.ttf', 'NanumGothic', 'normal');
+            }]);
+        }
+        document.getElementById('savePdfBtn').addEventListener('click', function() {
+            const explosive = document.getElementById('explosiveInput').value;
+            const detonator = document.getElementById('detonatorInput').value;
+            const power = document.getElementById('powerInput').value;
+            const sw = document.getElementById('switchInput').value;
+            const realPhoto = document.getElementById('realPhoto').files[0];
+            const xrayPhoto = document.getElementById('xrayPhoto').files[0];
+
+            let doc = new window.jspdf.jsPDF();
+            doc.setFont('NanumGothic');
+            doc.setFontSize(16);
+            doc.text('의심물체 분석 결과', 10, 15);
+            doc.setFontSize(12);
+            let y = 30;
+            doc.text(`폭약: ${explosive}`, 10, y); y += 10;
+            doc.text(`기폭장치: ${detonator}`, 10, y); y += 10;
+            doc.text(`전원: ${power}`, 10, y); y += 10;
+            doc.text(`스위치: ${sw}`, 10, y); y += 10;
+            if(realPhoto) { doc.text(`실제 사진: ${realPhoto.name}`, 10, y); y += 10; }
+            if(xrayPhoto) { doc.text(`엑스레이 사진: ${xrayPhoto.name}`, 10, y); y += 10; }
+            doc.save('의심물체_분석.pdf');
         });
     </script>
 </body>
