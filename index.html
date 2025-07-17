@@ -8,6 +8,8 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
     <!-- jsPDF CDN -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <!-- html2canvas CDN 추가 -->
+    <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
     <style>
         :root {
             --primary-color: #000000;
@@ -353,6 +355,7 @@
         <div id="evacuation" class="tab-content active">
             <div class="input-section">
                 <h3>용기 정보</h3>
+                <label for="containerType">용기 종류</label>
                 <select id="containerType">
                     <option value="">용기 종류 선택</option>
                     <option value="pipe">파이프 (1L)</option>
@@ -363,13 +366,16 @@
                     <option value="drum">드럼통 (200L)</option>
                     <option value="carTrunk">승용차 트렁크 (500L)</option>
                     <option value="van">승합차 적재공간 (2500L)</option>
-                    <option value="custom">직접 입력</option>
                 </select>
 
-                <div id="customVolumeInput" style="display: none;">
-                    <input type="number" id="customWidth" placeholder="가로 (cm)" min="0" step="0.1">
-                    <input type="number" id="customLength" placeholder="세로 (cm)" min="0" step="0.1">
-                    <input type="number" id="customHeight" placeholder="높이 (cm)" min="0" step="0.1">
+                <div class="container-manual-row" style="display:flex;align-items:center;gap:10px;margin-top:10px;flex-wrap:wrap;">
+                    <label for="customWidth" style="margin-bottom:0;">가로(cm)</label>
+                    <input type="number" id="customWidth" min="0" step="0.1" style="width:70px;">
+                    <label for="customLength" style="margin-bottom:0;">세로(cm)</label>
+                    <input type="number" id="customLength" min="0" step="0.1" style="width:70px;">
+                    <label for="customHeight" style="margin-bottom:0;">높이(cm)</label>
+                    <input type="number" id="customHeight" min="0" step="0.1" style="width:70px;">
+                    <span id="customVolumeResult" style="margin-left:10px;font-weight:bold;color:#03c75a;"></span>
                 </div>
             </div>
 
@@ -390,11 +396,11 @@
                 <h3>K-Factor 선택</h3>
                 <select id="kFactor">
                     <option value="328.0">K = 328 (무반사 파괴 - Blast overpressure 1 psi 미만, 엄격한 민간 보호 수준)</option>
-                    <option value="100.0">K = 100 (구조물 피해 방지, 일반적인 민간 및 경계 유지 수준)</option>
+                    <option value="100.0" selected>K = 100 (구조물 피해 방지, 일반적인 민간 및 경계 유지 수준)</option>
                     <option value="40.0">K = 40 (작전상 인명 피해 최소화 기준 - High risk, 군사 작전상 최소 안전거리 기준)</option>
                     <option value="24.0">K = 24 (중간 위험 구역 설정, 위험 감수 전제 작전 구역)</option>
                     <option value="10.0">K = 10 (폭발물 처리작전 중 접근 한계, EOD 장비 또는 인력 접근 가능한 수준)</option>
-                    <option value="5.0" selected>K = 0~5 (극한 근접 작전 또는 확산시험 목적, 대부분 무인 작전 또는 실험 환경)</option>
+                    <option value="5.0">K = 0~5 (극한 근접 작전 또는 확산시험 목적, 대부분 무인 작전 또는 실험 환경)</option>
                 </select>
             </div>
 
@@ -468,7 +474,7 @@
                     <div class="image-upload-item">
                         <label for="xrayPhoto">엑스레이 사진:</label>
                         <input type="file" id="xrayPhoto" accept="image/*">
-                        <img id="xrayPhotoPreview" src="#" alt="엑스레이 사진 미리보기" class="image-preview">
+                        <img id="xrayPhotoPreview" src="#" alt="" class="image-preview">
                     </div>
                 </div>
             </div>
@@ -596,25 +602,47 @@
             circles.push(textMarker); // circles 배열에 추가하여 관리 (삭제 시 함께 제거)
         }
 
-        // 현재 위치 가져오기 버튼 이벤트
+        // 대피반경 토글 상태 변수
+        let isEvacuationCircleVisible = false;
+        let lastEvacuationCircleData = null;
+
+        // 대피 반경 표시 버튼 이벤트 리스너 (토글)
+        document.getElementById('drawCircleBtn').addEventListener('click', function() {
+            if (!currentMarker) {
+                alert('먼저 지도에 위치를 설정해주세요 (검색 또는 현재 위치).');
+                return;
+            }
+            if (!lastCalculatedDistances) {
+                alert('먼저 대피 거리를 계산해주세요.');
+                return;
+            }
+            const latlng = currentMarker.getLatLng();
+            if (!isEvacuationCircleVisible) {
+                drawEvacuationCircles(latlng.lat, latlng.lng, lastCalculatedDistances);
+                isEvacuationCircleVisible = true;
+                lastEvacuationCircleData = {lat: latlng.lat, lng: latlng.lng, distances: lastCalculatedDistances};
+            } else {
+                // 반경 제거
+                if (typeof circles !== 'undefined' && Array.isArray(circles)) {
+                    circles.forEach(circle => map.removeLayer(circle));
+                    circles = [];
+                }
+                isEvacuationCircleVisible = false;
+            }
+        });
+
+        // 현재 위치 버튼 클릭 시 반경은 사라지지만, drawCircleBtn을 누르면 다시 표시 가능
         document.getElementById('getCurrentLocation').addEventListener('click', function() {
             if (navigator.geolocation) {
-                navigator.geolocation.getCurrentPosition(
-                    function(position) {
-                        const lat = position.coords.latitude;
-                        const lng = position.coords.longitude;
-                        initMap(lat, lng);
-                    },
-                    function(error) {
-                        alert('위치 정보를 가져올 수 없습니다: ' + error.message);
-                        // 기본 위치 (서울시청)로 초기화
-                        initMap(37.5665, 126.9780);
+                navigator.geolocation.getCurrentPosition(function(position) {
+                    setMarkerPosition(position.coords.latitude, position.coords.longitude);
+                    // 반경은 숨김 상태로 전환
+                    if (typeof circles !== 'undefined' && Array.isArray(circles)) {
+                        circles.forEach(circle => map.removeLayer(circle));
+                        circles = [];
                     }
-                );
-            } else {
-                alert('이 브라우저에서는 위치 정보를 지원하지 않습니다.');
-                // 기본 위치 (서울시청)로 초기화
-                initMap(37.5665, 126.9780);
+                    isEvacuationCircleVisible = false;
+                });
             }
         });
 
@@ -632,32 +660,48 @@
 
         // 계산 버튼 클릭 이벤트
         document.getElementById('calculateBtn').addEventListener('click', function() {
+            // 1. 용기 종류 선택값
             const containerType = document.getElementById('containerType').value;
-            const explosiveType = document.getElementById('explosiveType').value;
+            // 2. 직접입력값
+            const w = parseFloat(document.getElementById('customWidth').value);
+            const l = parseFloat(document.getElementById('customLength').value);
+            const h = parseFloat(document.getElementById('customHeight').value);
+            let volumeL = null;
 
-            if (!containerType || !explosiveType) {
-                alert('용기 종류와 폭발물 종류를 모두 선택해주세요.');
+            // 용기 종류별 부피(리터) 매핑
+            const containerVolumes = {
+                pipe: 1,
+                briefcase: 15,
+                backpack: 20,
+                box: 30,
+                suitcase: 35,
+                drum: 200,
+                carTrunk: 500,
+                van: 2500
+            };
+
+            if (containerType && containerVolumes[containerType]) {
+                volumeL = containerVolumes[containerType];
+            } else if (!containerType && !isNaN(w) && !isNaN(l) && !isNaN(h) && w > 0 && l > 0 && h > 0) {
+                // 직접입력값이 모두 유효하면 직접입력 부피 사용
+                const volumeCm3 = w * l * h;
+                volumeL = volumeCm3 / 1000;
+            }
+
+            if (volumeL === null) {
+                alert('용기 종류를 선택하거나 직접 가로/세로/높이를 입력해 주세요.');
                 return;
             }
 
-            let volume = 0;
-            if (containerType === 'custom') {
-                const width = parseFloat(document.getElementById('customWidth').value);
-                const length = parseFloat(document.getElementById('customLength').value);
-                const height = parseFloat(document.getElementById('customHeight').value);
+            const explosiveType = document.getElementById('explosiveType').value;
 
-                if (!width || !length || !height) {
-                    alert('가로, 세로, 높이를 모두 입력해주세요.');
-                    return;
-                }
-
-                volume = (width * length * height) / 1000; // cm³ to L
-            } else {
-                volume = predefinedContainers[containerType];
+            if (!explosiveType) {
+                alert('폭발물 종류를 선택해주세요.');
+                return;
             }
 
             const density = explosivesData[explosiveType].density;
-            const maxWeight = volume * density;
+            const maxWeight = volumeL * density;
             const tntEquivalent = maxWeight * explosivesData[explosiveType].tntEquivalent;
 
             const kFactors = {
@@ -685,7 +729,7 @@
                 <h3>분석 결과</h3>
                 <div class="result-item">
                     <span>용기 부피:</span>
-                    <strong>${volume.toFixed(2)} L</strong>
+                    <strong>${volumeL.toFixed(2)} L</strong>
                 </div>
                 <div class="result-item">
                     <span>예상 최대 폭발물 중량:</span>
@@ -851,32 +895,132 @@
         if (window.jspdf && window.jspdf.jsPDF) {
             window.jspdf.jsPDF.API.events.push(['addFonts', function() {
                 this.addFileToVFS('NanumGothic.ttf',
-'AAEAAAASAQAABAAgR0RFRrRCsIIAAACcAAAAYGNtYXAWAAABHAAAADZnbHlmAAABuAAAABRnbHlmAAAB9AAAADZnbHlmAAACCAAAABRnbHlmAAACNAAAADZnbHlmAAACRAAAABRnbHlmAAACXAAAADZnbHlmAAACdAAAABRnbHlmAAACjAAAADZnbHlmAAACpAAAABRnbHlmAAACvAAAADZnbHlmAAAC1AAAABRnbHlmAAAC7AAAADZnbHlmAAADBAAAABRnbHlmAAADHAAAADZnbHlmAAADNAAAABRnbHlmAAADRAAAADZnbHlmAAADZAAAABRnbHlmAAADfAAAADZnbHlmAAADlAAAABRnbHlmAAADrAAAADZnbHlmAAADxAAAABRnbHlmAAAD3AAAADZnbHlmAAAEAAAAABRnbHlmAAAEGAAAADZnbHlmAAAEJAAAABRnbHlmAAAEQAAAADZnbHlmAAAEWAAAABRnbHlmAAAEcAAAADZnbHlmAAAEiAAAABRnbHlmAAAEoAAAADZnbHlmAAAEuAAAABRnbHlmAAAE0AAAADZnbHlmAAAE6AAAABRnbHlmAAAFBAAAADZnbHlmAAAFGAAAABRnbHlmAAAFMAAAADZnbHlmAAAFSAAAABRnbHlmAAAFWAAAADZnbHlmAAAFcAAAABRnbHlmAAAFiAAAADZnbHlmAAAFoAAAABRnbHlmAAAFuAAAADZnbHlmAAAF0AAAABRnbHlmAAAF6AAAADZnbHlmAAAGAAAAABRnbHlmAAAGGAAAADZnbHlmAAAGJAAAABRnbHlmAAAGQAAAADZnbHlmAAAGWAAAABRnbHlmAAAGcAAAADZnbHlmAAAGiAAAABRnbHlmAAAGoAAAADZnbHlmAAAGuAAAABRnbHlmAAAG0AAAADZnbHlmAAAG6AAAABRnbHlmAAAHBAAAADZnbHlmAAAHGAAAABRnbHlmAAAHMAAAADZnbHlmAAAHSAAAABRnbHlmAAAHWAAAADZnbHlmAAAHcAAAABRnbHlmAAAHiAAAADZnbHlmAAAHoAAAABRnbHlmAAAHuAAAADZnbHlmAAAH0AAAABRnbHlmAAAH6AAAADZnbHlmAAAI...');
+'AAEAAAASAQAABAAgR0RFRrRCsIIAAACcAAAAYGNtYXAWAAABHAAAADZnbHlmAAABuAAAABRnbHlmAAAB9AAAADZnbHlmAAACCAAAABRnbHlmAAACNAAAADZnbHlmAAACRAAAABRnbHlmAAACXAAAADZnbHlmAAACdAAAABRnbHlmAAACjAAAADZnbHlmAAACpAAAABRnbHlmAAACvAAAADZnbHlmAAAC1AAAABRnbHlmAAAC7AAAADZnbHlmAAADBAAAABRnbHlmAAADHAAAADZnbHlmAAADNAAAABRnbHlmAAADRAAAADZnbHlmAAADZAAAABRnbHlmAAADfAAAADZnbHlmAAADlAAAABRnbHlmAAADrAAAADZnbHlmAAADxAAAABRnbHlmAAAD3AAAADZnbHlmAAAEAAAAABRnbHlmAAAEGAAAADZnbHlmAAAEJAAAABRnbHlmAAAEQAAAADZnbHlmAAAEWAAAABRnbHlmAAAEcAAAADZnbHlmAAAEiAAAABRnbHlmAAAEoAAAADZnbHlmAAAEuAAAABRnbHlmAAAE0AAAADZnbHlmAAAE6AAAABRnbHlmAAAFBAAAADZnbHlmAAAFGAAAABRnbHlmAAAFMAAAADZnbHlmAAAFSAAAABRnbHlmAAAFWAAAADZnbHlmAAAFcAAAABRnbHlmAAAFiAAAADZnbHlmAAAFoAAAABRnbHlmAAAFuAAAADZnbHlmAAAF0AAAABRnbHlmAAAF6AAAADZnbHlmAAAGAAAAABRnbHlmAAAGGAAAADZnbHlmAAAGJAAAABRnbHlmAAAGQAAAADZnbHlmAAAGWAAAABRnbHlmAAAGcAAAADZnbHlmAAAGiAAAABRnbHlmAAAGoAAAADZnbHlmAAAGuAAAADZnbHlmAAAG0AAAADZnbHlmAAAG6AAAABRnbHlmAAAHBAAAADZnbHlmAAAHGAAAABRnbHlmAAAHMAAAADZnbHlmAAAHSAAAABRnbHlmAAAHWAAAADZnbHlmAAAHcAAAABRnbHlmAAAHiAAAADZnbHlmAAAHoAAAABRnbHlmAAAHuAAAADZnbHlmAAAH0AAAABRnbHlmAAAH6AAAADZnbHlmAAAI...');
                 this.addFont('NanumGothic.ttf', 'NanumGothic', 'normal');
             }]);
         }
-        document.getElementById('savePdfBtn').addEventListener('click', function() {
-            const explosive = document.getElementById('explosiveInput').value;
-            const detonator = document.getElementById('detonatorInput').value;
-            const power = document.getElementById('powerInput').value;
-            const sw = document.getElementById('switchInput').value;
-            const realPhoto = document.getElementById('realPhoto').files[0];
-            const xrayPhoto = document.getElementById('xrayPhoto').files[0];
-
-            let doc = new window.jspdf.jsPDF();
-            doc.setFont('NanumGothic');
-            doc.setFontSize(16);
-            doc.text('의심물체 분석 결과', 10, 15);
-            doc.setFontSize(12);
-            let y = 30;
-            doc.text(`폭약: ${explosive}`, 10, y); y += 10;
-            doc.text(`기폭장치: ${detonator}`, 10, y); y += 10;
-            doc.text(`전원: ${power}`, 10, y); y += 10;
-            doc.text(`스위치: ${sw}`, 10, y); y += 10;
-            if(realPhoto) { doc.text(`실제 사진: ${realPhoto.name}`, 10, y); y += 10; }
-            if(xrayPhoto) { doc.text(`엑스레이 사진: ${xrayPhoto.name}`, 10, y); y += 10; }
-            doc.save('의심물체_분석.pdf');
+        document.getElementById('savePdfBtn').addEventListener('click', async function() {
+            // PDF 저장 대신 스크린샷 저장
+            const analysisTab = document.getElementById('analysis');
+            html2canvas(analysisTab, {useCORS: true, backgroundColor: '#fff'}).then(function(canvas) {
+                const link = document.createElement('a');
+                link.href = canvas.toDataURL('image/png');
+                link.download = '의심물체_분석.png';
+                link.click();
+            });
         });
+
+        // 직접입력 가로/세로/높이 입력 시 부피 자동 계산
+        function updateCustomVolume() {
+            const w = parseFloat(document.getElementById('customWidth').value);
+            const l = parseFloat(document.getElementById('customLength').value);
+            const h = parseFloat(document.getElementById('customHeight').value);
+            const resultSpan = document.getElementById('customVolumeResult');
+            if (!isNaN(w) && !isNaN(l) && !isNaN(h) && w > 0 && l > 0 && h > 0) {
+                const volumeCm3 = w * l * h;
+                const volumeL = volumeCm3 / 1000;
+                resultSpan.textContent = `부피: ${volumeCm3.toLocaleString()} ㎤ (${volumeL.toLocaleString(undefined, {maximumFractionDigits:2})} L)`;
+            } else {
+                resultSpan.textContent = '';
+            }
+        }
+        ['customWidth','customLength','customHeight'].forEach(id => {
+            document.getElementById(id).addEventListener('input', updateCustomVolume);
+        });
+
+        function setMarkerPosition(lat, lng) {
+            // 기존 마커 제거
+            if (currentMarker) {
+                map.removeLayer(currentMarker);
+            }
+            // 새 마커 추가
+            currentMarker = L.marker([lat, lng]).addTo(map);
+
+            // 지도 중심 이동 추가
+            map.setView([lat, lng], 15);
+
+            // 좌표 입력란, 주소 등 추가 갱신 코드...
+            // (기존 코드 유지)
+        }
+
+        // 엑스레이 사진 위에 마커 표시 기능
+        function ensureXrayMarkerContainer() {
+            const previewImg = document.getElementById('xrayPhotoPreview');
+            let container = previewImg.parentElement.querySelector('.xray-marker-container');
+            if (!container) {
+                container = document.createElement('div');
+                container.className = 'xray-marker-container';
+                previewImg.parentElement.style.position = 'relative';
+                previewImg.parentElement.appendChild(container);
+            }
+            
+            // 이미지의 실제 위치와 크기로 컨테이너 설정
+            const imgRect = previewImg.getBoundingClientRect();
+            const parentRect = previewImg.parentElement.getBoundingClientRect();
+            
+            container.style.position = 'absolute';
+            container.style.left = (imgRect.left - parentRect.left) + 'px';
+            container.style.top = (imgRect.top - parentRect.top) + 'px';
+            container.style.width = imgRect.width + 'px';
+            container.style.height = imgRect.height + 'px';
+            container.style.pointerEvents = 'none';
+            
+            return container;
+        }
+
+        // 이미지 로드/리사이즈 시 컨테이너 크기 갱신
+        const xrayImg = document.getElementById('xrayPhotoPreview');
+        xrayImg.addEventListener('load', function() {
+            ensureXrayMarkerContainer();
+        });
+        window.addEventListener('resize', function() {
+            ensureXrayMarkerContainer();
+        });
+
+        function addXrayMarker(x, y) {
+            const previewImg = document.getElementById('xrayPhotoPreview');
+            const container = ensureXrayMarkerContainer();
+            const markerSize = 18;
+            const marker = document.createElement('div');
+            marker.className = 'xray-marker-dot';
+            marker.style.position = 'absolute';
+            marker.style.width = markerSize + 'px';
+            marker.style.height = markerSize + 'px';
+            marker.style.borderRadius = '50%';
+            marker.style.background = 'transparent';
+            marker.style.border = '1.5px solid #ff3333';
+            marker.style.boxShadow = '0 0 4px #ff3333, 0 0 2px #fff';
+            marker.style.left = x + 'px';
+            marker.style.top = y + 'px';
+            marker.style.transform = 'translate(-50%, -50%)';
+            marker.style.pointerEvents = 'auto';
+            marker.title = '더블클릭 위치';
+            
+            marker.addEventListener('click', function(e) {
+                e.stopPropagation();
+                container.removeChild(marker);
+            });
+            container.appendChild(marker);
+        }
+
+        // 엑스레이 사진 더블클릭 이벤트
+        xrayImg.addEventListener('dblclick', function(e) {
+            const rect = xrayImg.getBoundingClientRect();
+            // 이미지 내부에서의 정확한 좌표 계산
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            addXrayMarker(x, y);
+        });
+
+        // 스타일 추가
+        const style = document.createElement('style');
+        style.innerHTML = `
+        .xray-marker-container { pointer-events: none; position: absolute; left:0; top:0; }
+        .xray-marker-dot { pointer-events: auto; transition: transform 0.1s; cursor: pointer; }
+        .xray-marker-dot:hover { transform: scale(1.2); border-color: #ff0000; }
+        #xrayPhotoPreview { display: block !important; vertical-align: top !important; }
+`;
+        document.head.appendChild(style);
     </script>
 </body>
 </html> 
