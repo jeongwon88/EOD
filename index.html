@@ -365,16 +365,14 @@
                 white-space: nowrap;
             }
             .container-manual-row label {
-                font-size: 7px;
-                min-width: 2px;
+                font-size: 15px;
+                min-width: 3px;
                 display: inline-block;
             }
-            .container-manual-row input[type="text"] {
-                width: 14px;
-                font-size: 11px;
-                padding: 0;
+            .container-manual-row input[type="number"] {
+                width: 18px;
+                font-size: 15px;
                 display: inline-block;
-                text-align: center;
             }
             #customVolumeResult {
                 font-size: 11px;
@@ -414,11 +412,11 @@
 
                 <div class="container-manual-row" style="display:flex;align-items:center;gap:10px;margin-top:10px;flex-wrap:wrap;">
                     <label for="customWidth" style="margin-bottom:0;">가로(cm)</label>
-                    <input type="text" id="customWidth" maxlength="4" inputmode="numeric" pattern="[0-9]*" style="width:70px;">
+                    <input type="number" id="customWidth" min="0" step="0.1" style="width:70px;">
                     <label for="customLength" style="margin-bottom:0;">세로(cm)</label>
-                    <input type="text" id="customLength" maxlength="4" inputmode="numeric" pattern="[0-9]*" style="width:70px;">
+                    <input type="number" id="customLength" min="0" step="0.1" style="width:70px;">
                     <label for="customHeight" style="margin-bottom:0;">높이(cm)</label>
-                    <input type="text" id="customHeight" maxlength="4" inputmode="numeric" pattern="[0-9]*" style="width:70px;">
+                    <input type="number" id="customHeight" min="0" step="0.1" style="width:70px;">
                     <span id="customVolumeResult" style="margin-left:10px;font-weight:bold;color:#03c75a;"></span>
                 </div>
             </div>
@@ -495,11 +493,15 @@
                     <h4>대피 반경 범례</h4>
                     <div class="circle-legend-item">
                         <div class="circle-legend-color" style="background-color: rgba(255, 0, 0, 0.2)"></div>
-                        <span>최대 안전거리 (일반 대피)</span>
+                        <span>최소 안전거리</span>
                     </div>
                     <div class="circle-legend-item">
                         <div class="circle-legend-color" style="background-color: rgba(0, 255, 0, 0.2)"></div>
-                        <span>최소 안전거리 (엄폐 후 방호)</span>
+                        <span>작전거리</span>
+                    </div>
+                    <div class="circle-legend-item">
+                        <div class="circle-legend-color" style="background-color: rgba(0, 123, 255, 0.2)"></div>
+                        <span>설정 대피거리</span>
                     </div>
                 </div>
             </div>
@@ -596,7 +598,7 @@
         }
 
         // 대피 반경 그리기 함수
-        function drawEvacuationCircles(lat, lng, distances) {
+        function drawEvacuationCircles(lat, lng, distances, customDistance = null) {
             // 기존 원 제거
             circles.forEach(circle => map.removeLayer(circle));
             circles = [];
@@ -617,6 +619,16 @@
                 fillOpacity: 0.2
             }).addTo(map));
 
+            // 설정 대피거리 (파란색)
+            if (customDistance) {
+                circles.push(L.circle([lat, lng], {
+                    radius: customDistance,
+                    color: 'blue',
+                    fillColor: '#007bff',
+                    fillOpacity: 0.15
+                }).addTo(map));
+            }
+
             // 모든 원이 보이도록 지도 뷰 조정
             const bounds = L.latLngBounds([lat, lng]);
             // 대피 반경이 큰 원에 맞춰 지도 뷰 조정 (일반 대피)
@@ -624,8 +636,11 @@
             map.fitBounds(bounds, { padding: [20, 20] });
 
             // 거리 표시 추가
-            addDistanceLabels(lat, lng, distances.general.distance, '일반 대피', 'red');
-            addDistanceLabels(lat, lng, distances.protected.distance, '엄폐 후 방호', 'green');
+            addDistanceLabels(lat, lng, distances.general.distance, '최소 안전거리', 'red');
+            addDistanceLabels(lat, lng, distances.protected.distance, '작전거리', 'green');
+            if (customDistance) {
+                addDistanceLabels(lat, lng, customDistance, '설정 대피거리', 'blue');
+            }
         }
 
         // 거리 표시 라벨 추가 함수
@@ -662,9 +677,41 @@
             }
             const latlng = currentMarker.getLatLng();
             if (!isEvacuationCircleVisible) {
-                drawEvacuationCircles(latlng.lat, latlng.lng, lastCalculatedDistances);
+                // 설정 대피거리 값 계산
+                const selectedK = parseFloat(document.getElementById('kFactor').value);
+                const tntEquivalent = (() => {
+                    // 계산 버튼과 동일하게 TNT 당량 계산
+                    const containerType = document.getElementById('containerType').value;
+                    const w = parseFloat(document.getElementById('customWidth').value);
+                    const l = parseFloat(document.getElementById('customLength').value);
+                    const h = parseFloat(document.getElementById('customHeight').value);
+                    let volumeL = null;
+                    const containerVolumes = {
+                        pipe: 1,
+                        briefcase: 15,
+                        backpack: 20,
+                        box: 30,
+                        suitcase: 35,
+                        drum: 200,
+                        carTrunk: 500,
+                        van: 2500
+                    };
+                    if (containerType && containerVolumes[containerType]) {
+                        volumeL = containerVolumes[containerType];
+                    } else if (!containerType && !isNaN(w) && !isNaN(l) && !isNaN(h) && w > 0 && l > 0 && h > 0) {
+                        const volumeCm3 = w * l * h;
+                        volumeL = volumeCm3 / 1000;
+                    }
+                    const explosiveType = document.getElementById('explosiveType').value;
+                    if (!explosiveType || volumeL === null) return 0;
+                    const density = explosivesData[explosiveType].density;
+                    const maxWeight = volumeL * density;
+                    return maxWeight * explosivesData[explosiveType].tntEquivalent;
+                })();
+                const customDistance = Math.ceil(selectedK * Math.pow(tntEquivalent, 1/3));
+                drawEvacuationCircles(latlng.lat, latlng.lng, lastCalculatedDistances, customDistance);
                 isEvacuationCircleVisible = true;
-                lastEvacuationCircleData = {lat: latlng.lat, lng: latlng.lng, distances: lastCalculatedDistances};
+                lastEvacuationCircleData = {lat: latlng.lat, lng: latlng.lng, distances: lastCalculatedDistances, customDistance};
             } else {
                 // 반경 제거
                 if (typeof circles !== 'undefined' && Array.isArray(circles)) {
@@ -811,7 +858,7 @@
             // 현재 위치에 대피 반경 표시
             if (currentMarker) {
                 const latlng = currentMarker.getLatLng();
-                drawEvacuationCircles(latlng.lat, latlng.lng, distances);
+                drawEvacuationCircles(latlng.lat, latlng.lng, distances, customDistance);
             } else {
                 // 위치가 없는 경우 위치 가져오기 버튼 클릭
                 document.getElementById('getCurrentLocation').click();
