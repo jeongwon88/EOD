@@ -365,15 +365,16 @@
                 white-space: nowrap;
             }
             .container-manual-row label {
-                font-size: 8px;
-                min-width: 3px;
+                font-size: 7px;
+                min-width: 2px;
                 display: inline-block;
             }
-            .container-manual-row input[type="number"] {
-                width: 8px;
-                font-size: 9px;
+            .container-manual-row input[type="text"] {
+                width: 14px;
+                font-size: 11px;
                 padding: 0;
                 display: inline-block;
+                text-align: center;
             }
             #customVolumeResult {
                 font-size: 11px;
@@ -413,11 +414,11 @@
 
                 <div class="container-manual-row" style="display:flex;align-items:center;gap:10px;margin-top:10px;flex-wrap:wrap;">
                     <label for="customWidth" style="margin-bottom:0;">가로(cm)</label>
-                    <input type="number" id="customWidth" min="0" step="0.1" style="width:70px;">
+                    <input type="text" id="customWidth" maxlength="4" inputmode="numeric" pattern="[0-9]*" style="width:70px;">
                     <label for="customLength" style="margin-bottom:0;">세로(cm)</label>
-                    <input type="number" id="customLength" min="0" step="0.1" style="width:70px;">
+                    <input type="text" id="customLength" maxlength="4" inputmode="numeric" pattern="[0-9]*" style="width:70px;">
                     <label for="customHeight" style="margin-bottom:0;">높이(cm)</label>
-                    <input type="number" id="customHeight" min="0" step="0.1" style="width:70px;">
+                    <input type="text" id="customHeight" maxlength="4" inputmode="numeric" pattern="[0-9]*" style="width:70px;">
                     <span id="customVolumeResult" style="margin-left:10px;font-weight:bold;color:#03c75a;"></span>
                 </div>
             </div>
